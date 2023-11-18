@@ -242,7 +242,7 @@ public:
 		return Q;
 	}
 
-	/// @brief Решение задачи PQ методо Эйлера
+	/// @brief Решение задачи PQ методом Эйлера
 	/// @param pipe Ссылка на параметры трубы
 	/// @param problem Ссылка на условие задачи
 	vector<double> solve_PQ_euler(simple_pipe_t& pipe, steady_flow_problem_t& problem)
@@ -295,8 +295,7 @@ void pressure_to_file_(simple_pipe_t& pipe, string filename = "data.txt")
 }
 
 
-// Класс, для системы размерности <1>
-// <2> - Размерность системы уравнений
+/// Оболочка для уравнения бернулли в задаче PP для использования решателя Ньютона - Рафсона
 class sample_system : public fixed_system_t<1>
 {
 	/// @brief Ссылка на структуру с параметрами трубы
@@ -307,27 +306,32 @@ class sample_system : public fixed_system_t<1>
 	using fixed_system_t<1>::var_type;
 public:
 
+	/// @brief Констуктор уравнения Бернулли для задачи PP
+	/// @param pipe Ссылка на сущность трубы
+	/// @param problem Ссылка на сущность с условием задачи
 	sample_system(simple_pipe_t& pipe, steady_flow_problem_t& problem) :
 		pipe{ pipe }, problem{ problem }
 	{
 	}
 
-	// Задание функции невязок
-	var_type residuals(const var_type& x) 
+	/// @brief Функция невязок - все члены уравнения Бернулли в правой части
+	/// @param speed - скорость течения нефти, [м/с]
+	/// @return Значение функци при заданной скорости
+	var_type residuals(const var_type& speed) 
 	{
-		
-		double speed = x;
 		double relative_roughness = pipe.absolute_roughness / pipe.internal_diameter;
 		double reynolds_number = (speed * pipe.internal_diameter) / problem.kinematic_viscosity;
 		double lambda = hydraulic_resistance_isaev(reynolds_number, relative_roughness);
-		double res = (lambda * (pipe.length * pow(speed, 2) / (pipe.internal_diameter * 2 * g))) + ((problem.Pout / (problem.density * g)) + problem.Zout) - (((problem.Pin / (problem.density * g)) + problem.Zin));
-		//cout << res << endl;
+		double res = (lambda * (pipe.length * pow(speed, 2) / (pipe.internal_diameter * 2 * g))) + 
+			((problem.Pout / (problem.density * g)) + problem.Zout) - 
+			(((problem.Pin / (problem.density * g)) + problem.Zin));
 		return { res };
 	}
 };
 
-int main()
+void testing_newton_raphson_()
 {
+	/// Задаем параметры трубы и создаем сущность трубы
 	double length = 80e3;
 	double external_diameter = 720e-3;
 	double wall_thickness = 10e-3;
@@ -335,47 +339,48 @@ int main()
 	double Zin = 50;
 	double Zout = 100;
 	simple_pipe_t pipe{ length, Zin, Zout, external_diameter, wall_thickness, absolute_roughness };
-	steady_flow_solver_t solver{};
 
-	/// Расчет давления в начале участка
+
+	/// Условие для задачи PQ - расчет давления в начале участка
 	double Pin = 0;
 	double Pout = 0.6e6;
 	double Q = 3500.0 / 3600;
 	double density = 870;
 	double kinematic_viscosity = 15e-6;
+
+	/// Создание сущности, содержащей условие задачи
 	steady_flow_problem_t problem1(pipe, Pin, Pout, Q, density, kinematic_viscosity);
+
+	/// Создание солвера (не из pde_solvers)
+	steady_flow_solver_t solver{};
+
 	problem1.Pin = solver.solve_PQ(pipe, problem1, true);
 	
+	/// Условие для задачи PP - расчет расхода
 	Pin = 5e6;
 	Pout = 0.8e6;
 	Q = 0;
 	density = 870;
 	kinematic_viscosity = 15e-6;
+
+	/// Создание сущности, содержащей условие задачи
 	steady_flow_problem_t problem3{ pipe, Pin, Pout, Q, density, kinematic_viscosity };
 
-
-	sample_system test(pipe, problem1);
-
-	std::ofstream out;
-	out.open("data.txt");
-	out << "время" << ',' << "скорость" << ',' << "функция" << endl;
-	if (out.is_open())
-		for (double v = -5; v <= 5; v += 0.1)
-			out << 0 << ',' << v << ',' << test.residuals(v) << endl;
-	out.close();
+	/// Создание сущности решаемого уравнения
+	sample_system test(pipe, problem3);
 
 	// Задание настроек решателя по умолчанию
 	fixed_solver_parameters_t<1, 0> parameters;
 	// Создание структуры для записи результатов расчета
 	fixed_solver_result_t<1> result;
-	// Решение системы нелинейныйх уравнений <2> с помощью решателя Ньютона - Рафсона
-	// { 0, 0 } - Начальное приближение
+	// Решение задачи PP с помощью решателя Ньютона - Рафсона
 	fixed_newton_raphson<1>::solve_dense(test, {10}, parameters, &result);
-	cout << result.argument * M_PI * pow(pipe.internal_diameter, 2) / 4 * 3600 << endl;
+	cout << "PP_task	Newtow_Raphson	Q = " << result.argument * (M_PI * pow(pipe.internal_diameter, 2) / 4) * 3600 << endl;
+	//cout << "PP_task		Iteration	Q =  " << solver.solve_PP_iteration(pipe, problem3) * 3600 << endl;
 
 }
 
-int main_2()
+void testing_PP_and_PQ_()
 {
 	double length = 80e3;
 	double external_diameter = 720e-3;
@@ -416,6 +421,10 @@ int main_2()
 	kinematic_viscosity = 15e-6;
 	steady_flow_problem_t problem3{ pipe, Pin, Pout, Q, density, kinematic_viscosity };
 	//cout << "PP_task		Iteration	Q =  " << solver.solve_PP_iteration(pipe, problem3) << endl;
-	return 0;
+}
+
+int main()
+{
+	testing_newton_raphson_();
 }
 
