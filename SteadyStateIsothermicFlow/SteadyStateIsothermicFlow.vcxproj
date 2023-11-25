@@ -105,6 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>D:\Diplom_Mag\SteadyStateIsothermicFlow\SteadyStateIsothermicFlow</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,7 +129,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="test_main.cpp" />
     <ClCompile Include="SteadyStateIsothermicFlow.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="solvers\steady_state_solvers.h" />
+    <ClInclude Include="testing\test_PQ.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
