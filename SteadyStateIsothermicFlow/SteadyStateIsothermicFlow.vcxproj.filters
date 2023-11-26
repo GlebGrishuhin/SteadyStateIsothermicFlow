@@ -18,9 +18,6 @@
     <ClCompile Include="SteadyStateIsothermicFlow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="test_main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="testing\test_PQ.h">

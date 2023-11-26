@@ -1,119 +1,32 @@
-#pragma once
+п»ї#pragma once
+
+#include <iomanip>
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <time.h>
+#include <algorithm>
+
+#include <fixed/fixed.h>
+#include <pde_solvers/pde_solvers.h>
+
+using namespace std;
 
 typedef vector<double> layer_t;
 
-/// @brief Условие задачи расчета изотермического течения жидкости на участке трубопровода.
-/// Искомые параметры инициализированы нулями.
-struct steady_flow_problem_t
+/// @brief РџРѕРёСЃРє РґР°РІР»РµРЅРёСЏ РїРѕ РёР·РІРµСЃС‚РЅРѕРјСѓ РґР°РІР»РµРЅРёСЋ Рё СЂР°СЃС…РѕРґСѓ. РЎРј[Р›СѓСЂСЊРµ 2012] СЂР°Р·РґРµР» 4.1 Р·Р°РґР°С‡Р° 1
+/// @param pipe РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ С‚СЂСѓР±С‹
+/// @param oil РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ РЅРµС„С‚Рё
+/// @param P ???
+/// @param solve_Pin Р¤Р»Р°Рі СЂР°СЃС‡РµС‚Р° РґР°РІР»РµРЅРёСЏ РІ РЅР°С‡Р°Р»Рµ СѓС‡Р°СЃС‚РєР°
+/// @return Р Р°СЃСЃС‡РёС‚Р°РЅРЅРѕРµ РґР°РІР»РµРЅРёРµ, [РџР°]
+double solve_PQ_(const pipe_properties_t& pipe, const oil_parameters_t& oil, double P, double Q, bool solve_Pin = false)
 {
-	/// @brief Ссылка на структуру с параметрами трубы, для которой решается задача
-	const pipe_properties_t& pipe;
-	/// @brief Давление в начале участка, [Па]
-	double Pin = 5e6;
-	/// @brief Высотная отметка начала участка, [м]
-	double Zin = 50;
-	/// @brief Давление в конце участка, [Па]
-	double Pout = 0.8e6;
-	/// @brief Высотная отметка конца участка, [м]
-	double Zout = 100;
-	/// @brief Расход жидкости, [м3/c]
-	double Q = 0;
-	/// @brief Плотность жидкости, [кг/м3]
-	double density = 870;
-	/// @brief Кинематическая вязкость, [м^2/с]
-	double kinematic_viscosity = 15e-6;
-
-	steady_flow_problem_t(pipe_properties_t& pipe, double Pin, double Pout, double Q,
-		double density, double kinematic_viscosity) :
-		pipe{ pipe }, Pin{ Pin }, Pout{ Pout }, Q{ Q }, density{ density },
-		kinematic_viscosity{ kinematic_viscosity }
-	{
-	}
-
-};
-
-/// @brief Шаблон обертки для передачи функции в euler_solver
-/// @tparam func_t - тип передаваемой лямбда-функции
-template <typename func_t>
-class function_wrapper_t
-{
-public:
-	/// @brief Функция, для которой реализована обертка
-	func_t& function;
-	/// @brief Ссылка на структуру с параметрами трубы
-	pipe_properties_t& pipe;
-	/// @brief Ссылка на структуру с условием задачи
-	steady_flow_problem_t& problem;
-
-	/// @brief Конструктор обертки
-	/// @param pipe Ссылка на структуру с параметрами трубы
-	/// @param problem Ссылка на структуру с условием задачи
-	/// @param function Функция, для которой реализована обертка
-	function_wrapper_t(auto pipe, auto problem, auto function) :
-		pipe{ pipe },
-		problem{ problem },
-		function{ function }
-	{
-	}
-
-	/// @brief Получить значение функции, находящейся в обертке
-	/// @param x Аргумент 
-	/// @param y Аргумент
-	/// @param index Индекс текущего элемента в векторе значений аргумента x
-	/// @return Значение функции, находящейся в обертке
-	double get_function_value(double x, double y, size_t index = 0)
-	{
-		return function(this->pipe, this->problem, x, y, index);
-	}
-};
-
-/// @brief Шаблон для солвера, решающего ДУ 1-го порядка методом Эйлера
-/// @tparam func_t 
-template <typename func_t>
-class euler_solver_t
-{
-	/// @brief Правая часть уравнения, завернутая в оболочку function_wrapper_t
-	function_wrapper_t<func_t>& right_part_wrapper;
-
-public:
-	/// @brief Конструктор солвера
-	/// @param right_part Правая часть уравнения, завернутая в оболочку function_wrapper_t
-	euler_solver_t(function_wrapper_t<func_t>& right_part) :
-		right_part_wrapper{ right_part }
-	{
-	}
-
-	/// @brief Решение уравнения методом Эйлера
-	/// @param x Вектор аргументов. Первое значение вектора считается начальным
-	/// @param y Вектор значений функции, куда будут записаны результаты. Первое значение вектора считается начальным
-	/// @return Костыль для избежания ошибки компиляции
-	double solve(vector<double>& x, vector<double>& y)
-	{
-		for (size_t i = 1; i < size(x); i++)
-		{
-			y[i] = y[i - 1] + (x[i] - x[i - 1]) * right_part_wrapper.get_function_value(x[i - 1], y[i - 1], i - 1);
-		}
-		return 0;
-	}
-};
-
-
-/// @brief Поиск давления по известному давлению и расходу
-/// @param pipe Ссылка на параметры трубы
-/// @param problem Ссылка на условие задачи
-/// @param solve_Pin Флаг расчета давления в начале участка
-/// @return Рассчитанное давление, [Па]
-double solve_PQ_(const pipe_properties_t& pipe, const oil_parameters_t& oil, double* init_cond, bool solve_Pin = false)
-{
-	// Извлекаем начальные данные задачи
-	double P = init_cond[0];
-	double Q = init_cond[1];
-
-	// Параметры нефти
-	// Переменные введены для удобства и краткой записи расчета
+	// РџР°СЂР°РјРµС‚СЂС‹ РЅРµС„С‚Рё
+	// РџРµСЂРµРјРµРЅРЅС‹Рµ РІРІРµРґРµРЅС‹ РґР»СЏ СѓРґРѕР±СЃС‚РІР° Рё РєСЂР°С‚РєРѕР№ Р·Р°РїРёСЃРё СЂР°СЃС‡РµС‚Р°
 	double rho = oil.density();
 	double mu = oil.viscosity();
-	// Параметры трубы
+	// РџР°СЂР°РјРµС‚СЂС‹ С‚СЂСѓР±С‹
 	double relative_roughness = pipe.wall.relativeRoughness();
 	double d = pipe.wall.diameter;
 	double z0 = pipe.profile.heights.front();
@@ -124,9 +37,9 @@ double solve_PQ_(const pipe_properties_t& pipe, const oil_parameters_t& oil, dou
 	double reynolds_number = (v * d) / mu;;
 	double lambda = pipe.resistance_function(reynolds_number, relative_roughness);
 
-	// Потери напора (правая часть уравнения Бернулли)
+	// РџРѕС‚РµСЂРё РЅР°РїРѕСЂР° (РїСЂР°РІР°СЏ С‡Р°СЃС‚СЊ СѓСЂР°РІРЅРµРЅРёСЏ Р‘РµСЂРЅСѓР»Р»Рё)
 	double dH = lambda * L * pow(v, 2) / (2 * d * M_G);
-	// Перепад высот
+	// РџРµСЂРµРїР°Рґ РІС‹СЃРѕС‚
 	double dZ = zL - z0;
 	if (solve_Pin)
 	{
@@ -142,32 +55,31 @@ double solve_PQ_(const pipe_properties_t& pipe, const oil_parameters_t& oil, dou
 	}
 }
 
-
-
-/// @brief Поиск расхода по известным давлениям методом итераций
-/// @param pipe Ссылка на параметры трубы
-/// @param problem Ссылка на условие задачи
-/// @param accuracy Точность поиска (по умолчанию 1e-3)
-/// @param iteration_max_count Предельное число итерация (по умолчанию 1000)
-/// @return Расход жидкости, [м3/с]
-double solve_PP_iteration_(const pipe_properties_t& pipe, const oil_parameters_t& oil, double pressures[2],
+/// @brief РџРѕРёСЃРє СЂР°СЃС…РѕРґР° РїРѕ РёР·РІРµСЃС‚РЅС‹Рј РґР°РІР»РµРЅРёСЏРј РјРµС‚РѕРґРѕРј РёС‚РµСЂР°С†РёР№
+/// @param pipe РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ С‚СЂСѓР±С‹
+/// @param oil РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ РЅРµС„С‚Рё
+/// @param pressures РњР°СЃСЃРёРІ РёР· p0 Рё pL
+/// @param accuracy РўРѕС‡РЅРѕСЃС‚СЊ РїРѕРёСЃРєР° (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 1e-3)
+/// @param iteration_max_count РџСЂРµРґРµР»СЊРЅРѕРµ С‡РёСЃР»Рѕ РёС‚РµСЂР°С†РёСЏ (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 1000)
+/// @return Р Р°СЃС…РѕРґ Р¶РёРґРєРѕСЃС‚Рё, [Рј3/СЃ]
+double solve_PP_iteration_(const pipe_properties_t& pipe, const oil_parameters_t& oil, double* pressures,
 	double accuracy = 1e-4, int iteration_max_count = 1000)
 {
 	double lambda_prev;
-	// Начальное приближение лямбды
+	// РќР°С‡Р°Р»СЊРЅРѕРµ РїСЂРёР±Р»РёР¶РµРЅРёРµ Р»СЏРјР±РґС‹
 	double lambda = 0.02;
-	// Скорость потока
+	// РЎРєРѕСЂРѕСЃС‚СЊ РїРѕС‚РѕРєР°
 	double v;
-	// Число Рейнольдса
+	// Р§РёСЃР»Рѕ Р РµР№РЅРѕР»СЊРґСЃР°
 	double reynolds_number;
-	// Изменение полного напора по трубе
+	// РР·РјРµРЅРµРЅРёРµ РїРѕР»РЅРѕРіРѕ РЅР°РїРѕСЂР° РїРѕ С‚СЂСѓР±Рµ
 	double dH;
 
-	// Параметры нефти
-	// Отдельные переменные введены для удобства и краткой записи формул расчета
+	// РџР°СЂР°РјРµС‚СЂС‹ РЅРµС„С‚Рё
+	// РћС‚РґРµР»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ РІРІРµРґРµРЅС‹ РґР»СЏ СѓРґРѕР±СЃС‚РІР° Рё РєСЂР°С‚РєРѕР№ Р·Р°РїРёСЃРё С„РѕСЂРјСѓР» СЂР°СЃС‡РµС‚Р°
 	double rho = oil.density();
 	double mu = oil.viscosity();
-	// Параметры трубы
+	// РџР°СЂР°РјРµС‚СЂС‹ С‚СЂСѓР±С‹
 	double z0 = pipe.profile.heights.front();
 	double zL = pipe.profile.heights.back();
 	double L = pipe.profile.getLength();
@@ -194,50 +106,91 @@ double solve_PP_iteration_(const pipe_properties_t& pipe, const oil_parameters_t
 	return Q;
 }
 
-
-/// @brief Вывод профиля давления в консоль
-/// @param pipe Ссылка на параметры трубы
-/// @param filename Имя файла
-void pressure_to_file_(const pipe_properties_t& pipe, const layer_t& profile, string filename = "data.txt")
+/// @brief РЈСЂР°РІРЅРµРЅРёРµ С‚СЂСѓР±С‹ РґР»СЏ СЂРµС€РµРЅРёСЏ РјРµС‚РѕРґРѕРј Р­Р№Р»РµСЂР° Р·Р°РґР°С‡Рё PQ 
+class Pipe_model_for_PQ_t : public ode_t<1>
 {
-	std::ofstream out;
-	out.open(filename);
-	out << "время" << ',' << "координата" << ',' << "давление" << endl;
-	if (out.is_open())
-		for (size_t i = 0; i < pipe.profile.coordinates.size(); i++)
-			out << 0 << ',' << pipe.profile.coordinates[i] << ',' << profile[i] << endl;
-	out.close();
-}
+public:
+	using ode_t<1>::equation_coeffs_type;
+	using ode_t<1>::right_party_type;
+	using ode_t<1>::var_type;
+protected:
+	pipe_properties_t& pipe;
+	oil_parameters_t& oil;
+	double flow;
 
+public:
+	/// @brief РљРѕРЅСЃС‚СѓРєС‚РѕСЂ СѓСЂР°РІРЅРµРЅРёСЏ С‚СЂСѓР±С‹
+	/// @param pipe РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ С‚СЂСѓР±С‹
+	/// @param oil РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ РЅРµС„С‚Рё
+	/// @param flow РћР±СЉРµРјРЅС‹Р№ СЂР°СЃС…РѕРґ
+	Pipe_model_for_PQ_t(pipe_properties_t& pipe, oil_parameters_t& oil, double flow)
+		: pipe(pipe)
+		, oil(oil)
+		, flow(flow)
+	{
+	}
 
-/// Оболочка для уравнения Бернулли в задаче PP для использования решателя Ньютона - Рафсона
+	/// @brief Р’РѕР·РІСЂР°С‰Р°РµС‚ РёР·РІРµСЃС‚РЅСѓСЋ СѓСЂР°РІРЅРµРЅРёСЋ СЃРµС‚РєСѓ
+	virtual const vector<double>& get_grid() const override {
+		return pipe.profile.coordinates;
+	}
+
+	/// @brief Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РїСЂР°РІРѕР№ С‡Р°СЃС‚Рё Р”РЈ
+	/// СЃРј. С„Р°Р№Р» 2023-11-09 Р РµР°Р»РёР·Р°С†РёСЏ СЃС‚Р°С†РёРѕРЅР°СЂРЅС‹С… РјРѕРґРµР»РµР№ СЃ РїСЂРёС†РµР»РѕРј РЅР° РєРІР°Р·РёСЃС‚Р°С†РёРѕРЅР°СЂ.docx
+	/// @param grid_index РћР±СЃС‡РёС‚С‹РІР°РµРјС‹Р№ РёРЅРґРµРєСЃ СЂР°СЃС‡РµС‚РЅРѕР№ СЃРµС‚РєРё
+	/// @param point_vector РќР°С‡Р°Р»СЊРЅС‹Рµ СѓСЃР»РѕРІРёСЏ
+	/// @return Р—РЅР°С‡РµРЅРёРµ РїСЂР°РІРѕР№ С‡Р°СЃС‚Рё Р”РЈ РІ С‚РѕС‡РєРµ point_vector
+	virtual right_party_type ode_right_party(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		double rho = oil.density();
+		double S_0 = pipe.wall.getArea();
+		double v = flow / (S_0);
+		double Re = v * pipe.wall.diameter / oil.viscosity();
+		double lambda = pipe.resistance_function(Re, pipe.wall.relativeRoughness());
+		double tau_w = lambda / 8 * rho * v * abs(v);
+
+		/// РћР±СЂР°Р±РѕС‚РєР° РёРЅРґРµРєСЃР° РІ СЃР»СѓС‡Р°Рµ СЂР°СЃС‡РµС‚РѕРІ РЅР° РіСЂР°РЅРёС†Р°С… С‚СЂСѓР±С‹
+		/// Р§С‚РѕР±С‹ РЅРµ РІС‹Р№С‚Рё Р·Р° РјР°СЃСЃРёРІ РІС‹СЃРѕС‚, Р±СѓРґРµРј СЃС‡РёС‚Р°С‚СЊ dz/dx РІ СЃРѕСЃРµРґРЅРµР№ С‚РѕС‡РєРµ
+		grid_index = grid_index == 0 ? grid_index + 1 : grid_index;
+		grid_index = grid_index == pipe.profile.heights.size() - 1 ? grid_index - 1 : grid_index;
+
+		double height_derivative = (pipe.profile.heights[grid_index] - pipe.profile.heights[grid_index - 1]) /
+			(pipe.profile.coordinates[grid_index] - pipe.profile.coordinates[grid_index - 1]);
+
+		return { ((-4) / pipe.wall.diameter) * tau_w - rho * M_G * height_derivative };
+	}
+
+};
+
+/// РћР±РѕР»РѕС‡РєР° РґР»СЏ СѓСЂР°РІРЅРµРЅРёСЏ Р‘РµСЂРЅСѓР»Р»Рё РІ Р·Р°РґР°С‡Рµ PP РґР»СЏ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ СЂРµС€Р°С‚РµР»СЏ РќСЊСЋС‚РѕРЅР° - Р Р°С„СЃРѕРЅР°
 class PP_solver_t : public fixed_system_t<1>
 {
-	/// @brief Ссылка на структуру с параметрами трубы
+	/// @brief РЎСЃС‹Р»РєР° РЅР° СЃС‚СЂСѓРєС‚СѓСЂСѓ СЃ РїР°СЂР°РјРµС‚СЂР°РјРё С‚СЂСѓР±С‹
 	const oil_parameters_t& oil;
-	/// @brief Ссылка на структуру с условием задачи
+	/// @brief РЎСЃС‹Р»РєР° РЅР° СЃС‚СЂСѓРєС‚СѓСЂСѓ СЃ СѓСЃР»РѕРІРёРµРј Р·Р°РґР°С‡Рё
 	const pipe_properties_t& pipe;
-	/// @brief Профиль давлений, из которого будут взяты давление в начале и конце трубы
+	/// @brief РџСЂРѕС„РёР»СЊ РґР°РІР»РµРЅРёР№, РёР· РєРѕС‚РѕСЂРѕРіРѕ Р±СѓРґСѓС‚ РІР·СЏС‚С‹ РґР°РІР»РµРЅРёРµ РІ РЅР°С‡Р°Р»Рµ Рё РєРѕРЅС†Рµ С‚СЂСѓР±С‹
 	layer_t& pressure_profile;
 
 	using fixed_system_t<1>::var_type;
 public:
 
-	/// @brief Констуктор уравнения Бернулли для задачи PP
-	/// @param pipe Ссылка на сущность трубы
-	/// @param problem Ссылка на сущность с условием задачи
-	PP_solver_t(const pipe_properties_t& pipe, const oil_parameters_t& oil, layer_t pressure_profile) :
+	/// @brief РљРѕРЅСЃС‚СѓРєС‚РѕСЂ СѓСЂР°РІРЅРµРЅРёСЏ Р‘РµСЂРЅСѓР»Р»Рё РґР»СЏ Р·Р°РґР°С‡Рё PP
+	/// @param pipe РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ С‚СЂСѓР±С‹
+	/// @param problem РЎСЃС‹Р»РєР° РЅР° СЃСѓС‰РЅРѕСЃС‚СЊ СЃ СѓСЃР»РѕРІРёРµРј Р·Р°РґР°С‡Рё
+	PP_solver_t(const pipe_properties_t& pipe, const oil_parameters_t& oil, layer_t& pressure_profile) :
 		pipe{ pipe }, oil{ oil }, pressure_profile{ pressure_profile }
 	{
 	}
 
-	/// @brief Функция невязок - все члены уравнения Бернулли в правой части
-	/// @param speed - скорость течения нефти, [м/с]
-	/// @return Значение функции невязок при заданной скорости
+	/// @brief Р¤СѓРЅРєС†РёСЏ РЅРµРІСЏР·РѕРє - РІСЃРµ С‡Р»РµРЅС‹ СѓСЂР°РІРЅРµРЅРёСЏ Р‘РµСЂРЅСѓР»Р»Рё РІ РїСЂР°РІРѕР№ С‡Р°СЃС‚Рё
+	/// @param v - СЃРєРѕСЂРѕСЃС‚СЊ С‚РµС‡РµРЅРёСЏ РЅРµС„С‚Рё, [Рј/СЃ]
+	/// @return Р—РЅР°С‡РµРЅРёРµ С„СѓРЅРєС†РёРё РЅРµРІСЏР·РѕРє РїСЂРё Р·Р°РґР°РЅРЅРѕР№ СЃРєРѕСЂРѕСЃС‚Рё
 	var_type residuals(const var_type& v)
 	{
-		// Параметры трубы и нефти
-		// Отдельные переменные введены для удобства и краткой записи формул расчета
+		// РџР°СЂР°РјРµС‚СЂС‹ С‚СЂСѓР±С‹ Рё РЅРµС„С‚Рё
+		// РћС‚РґРµР»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ РІРІРµРґРµРЅС‹ РґР»СЏ СѓРґРѕР±СЃС‚РІР° Рё РєСЂР°С‚РєРѕР№ Р·Р°РїРёСЃРё С„РѕСЂРјСѓР» СЂР°СЃС‡РµС‚Р°
 		double rho = oil.density();
 		double mu = oil.viscosity();
 
@@ -260,121 +213,17 @@ public:
 		return result;
 	}
 
+	/// @brief РџРѕРёСЃРє СЃРєРѕСЂРѕСЃС‚Рё С‚РµС‡РµРЅРёСЏ 
+	/// @param initial_argument - РЅР°С‡Р°Р»СЊРЅРѕРµ РїСЂРёР±Р»РёР¶РµРЅРёРµ, [Рј/СЃ]
+	/// @return РЎРєРѕСЂРѕСЃС‚СЊ С‚РµС‡РµРЅРёСЏ, [Рј/СЃ]
 	double solve(const double initial_argument = 0.1)
 	{
-		// Задание настроек решателя по умолчанию
+		// Р—Р°РґР°РЅРёРµ РЅР°СЃС‚СЂРѕРµРє СЂРµС€Р°С‚РµР»СЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
 		fixed_solver_parameters_t<1, 0> parameters;
-		// Создание структуры для записи результатов расчета
+		// РЎРѕР·РґР°РЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ РґР»СЏ Р·Р°РїРёСЃРё СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ СЂР°СЃС‡РµС‚Р°
 		fixed_solver_result_t<1> result;
-		// Решение задачи PP с помощью решателя Ньютона - Рафсона
+		// Р РµС€РµРЅРёРµ Р·Р°РґР°С‡Рё PP СЃ РїРѕРјРѕС‰СЊСЋ СЂРµС€Р°С‚РµР»СЏ РќСЊСЋС‚РѕРЅР° - Р Р°С„СЃРѕРЅР°
 		fixed_newton_raphson<1>::solve_dense(*this, initial_argument, parameters, &result);
 		return result.argument;
 	}
-
 };
-
-void testing_newton_raphson_()
-{
-
-	oil_parameters_t oil;
-	pipe_properties_t pipe;
-
-
-	/// Задаем параметры трубы и создаем сущность трубы
-	double length = 80e3;
-	double external_diameter = 720e-3;
-	double wall_thickness = 10e-3;
-	double absolute_roughness = 0.015e-3;
-	double Zin = 50;
-	double Zout = 100;
-	pipe_properties_t pipe{ length, Zin, Zout, external_diameter, wall_thickness, absolute_roughness };
-
-
-	/// Условие для задачи PQ - расчет давления в начале участка
-	double Pin = 0;
-	double Pout = 0.6e6;
-	double Q = 3500.0 / 3600;
-	double density = 870;
-	double kinematic_viscosity = 15e-6;
-
-	/// Создание сущности, содержащей условие задачи
-	steady_flow_problem_t problem1(pipe, Pin, Pout, Q, density, kinematic_viscosity);
-
-	/// Создание солвера (не из pde_solvers)
-	steady_flow_solver_t solver{};
-
-	problem1.Pin = solver.solve_PQ(pipe, problem1, true);
-
-	/// Условие для задачи PP - расчет расхода
-	Pin = 5e6;
-	Pout = 0.8e6;
-	Q = 0;
-	density = 870;
-	kinematic_viscosity = 15e-6;
-
-	/// Создание сущности, содержащей условие задачи
-	steady_flow_problem_t problem3{ pipe, Pin, Pout, Q, density, kinematic_viscosity };
-
-	/// Создание сущности решаемого уравнения
-	sample_system test(pipe, problem3);
-
-	// Задание настроек решателя по умолчанию
-	fixed_solver_parameters_t<1, 0> parameters;
-	// Создание структуры для записи результатов расчета
-	fixed_solver_result_t<1> result;
-	// Решение задачи PP с помощью решателя Ньютона - Рафсона
-	fixed_newton_raphson<1>::solve_dense(test, 10, parameters, &result);
-	cout << "PP_task	Newtow_Raphson	Q = " << result.argument * (M_PI * pow(pipe.internal_diameter, 2) / 4) * 3600 << " m3/h" << endl;
-	//cout << "PP_task		Iteration	Q =  " << solver.solve_PP_iteration(pipe, problem3) * 3600 << " m3/h" << endl;
-
-}
-
-void testing_PP_and_PQ_()
-{
-	double length = 80e3;
-	double external_diameter = 720e-3;
-	double wall_thickness = 10e-3;
-	double absolute_roughness = 0.015e-3;
-	double Zin = 50;
-	double Zout = 100;
-	pipe_properties_t pipe{ length, Zin, Zout, external_diameter, wall_thickness, absolute_roughness };
-	steady_flow_solver_t solver{};
-
-	/// Расчет давления в начале участка
-	double Pin = 0;
-	double Pout = 0.6e6;
-	double Q = 3500.0 / 3600;
-	double density = 870;
-	double kinematic_viscosity = 15e-6;
-	steady_flow_problem_t problem1(pipe, Pin, Pout, Q, density, kinematic_viscosity);
-	//cout << "PoutQ_task	Formula		Pin = " << solver.solve_PQ(pipe, problem1, true) << endl;
-
-	/// Расчет давления в конце участка
-	Pin = 5.65e6;
-	Pout = 0;
-	Q = 3500.0 / 3600;
-	density = 870;
-	kinematic_viscosity = 15e-6;
-	steady_flow_problem_t problem2{ pipe, Pin, Pout, Q, density, kinematic_viscosity };
-	cout << "PinQ_task	Formula		Pout = " << solver.solve_PQ(pipe, problem2) << endl;
-	/// Расчет задачи PQ методом Эйлера
-	solver.solve_PQ_euler(pipe, problem2);
-	cout << "PinQ_task	Euler		Pout = " << pipe.grid_pressures[pipe.get_points_number() - 1] << endl;
-	pressure_to_file_(pipe);
-
-	/// Расчет расхода
-	Pin = 5e6;
-	Pout = 0.8e6;
-	Q = 0;
-	density = 870;
-	kinematic_viscosity = 15e-6;
-	steady_flow_problem_t problem3{ pipe, Pin, Pout, Q, density, kinematic_viscosity };
-	cout << "PP_task		Iteration	Q =  " << solver.solve_PP_iteration(pipe, problem3) << endl;
-}
-
-int main()
-{
-	//testing_newton_raphson_();
-	testing_PP_and_PQ_();
-}
-
