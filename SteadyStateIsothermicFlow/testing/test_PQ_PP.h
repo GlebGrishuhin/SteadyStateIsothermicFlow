@@ -78,48 +78,7 @@ TEST(PQ_task, Formula)
     double Pout = 0.6e6;
     double Q = 3500.0 / 3600;
     
-    double Pin = solve_PQ_(pipe, oil, new double[] { Pout, Q }, true);
-
-}
-
-/// @brief Задача PP. Расчет расхода методом простых итераций. См [Лурье 2012] раздел 4.1 задача 2
-TEST(PP_task, Iteration)
-{
-    double length = 80e3;
-    double external_diameter = 720e-3;
-    double wall_thickness = 10e-3;
-    double absolute_roughness = 0.015e-3;
-    double Zin = 50;
-    double Zout = 100;
-
-    double density = 870;
-    double kinematic_viscosity = 15e-6;
-
-
-    size_t grid_size = 500;
-
-    /// Создаем сущность трубы
-    pipe_properties_t pipe;
-
-    /// Задаем сетку трубы
-    fill_profile_coordinates_(pipe, length, grid_size);
-    fill_profile_heights_(pipe, Zin, Zout);
-
-    pipe.wall.wallThickness = wall_thickness;
-    pipe.wall.diameter = external_diameter - 2 * wall_thickness;
-    pipe.wall.equivalent_roughness = absolute_roughness * pipe.wall.diameter;
-
-
-    oil_parameters_t oil;
-    oil.density.nominal_density = density;
-    oil.viscosity.nominal_viscosity = kinematic_viscosity;
-
-
-    /// Расчет расхода
-    double Pin = 5e6;
-    double Pout = 0.8e6;
-
-    double Q = solve_PP_iteration_(pipe, oil, new double[] { Pin, Pout });
+    double Pin = solve_PQ_(pipe, oil, Pout, Q, true);
 
 }
 
@@ -176,5 +135,121 @@ TEST(PQ_task, Euler)
     /// начальное условие Pout, 
     /// результаты расчета запишутся в слой, на который указывает start_layer
     solve_euler_corrector<1>(pipeModel, -1, Pout, &start_layer);
+}
 
+/// @brief Задача PP. Расчет расхода методом простых итераций. См [Лурье 2012] раздел 4.1 задача 2
+TEST(PP_task, Iteration)
+{
+    double length = 80e3;
+    double external_diameter = 720e-3;
+    double wall_thickness = 10e-3;
+    double absolute_roughness = 0.015e-3;
+    double Zin = 50;
+    double Zout = 100;
+
+    double density = 870;
+    double kinematic_viscosity = 15e-6;
+
+
+    size_t grid_size = 500;
+
+    /// Создаем сущность трубы
+    pipe_properties_t pipe;
+
+    /// Задаем сетку трубы
+    fill_profile_coordinates_(pipe, length, grid_size);
+    fill_profile_heights_(pipe, Zin, Zout);
+
+    pipe.wall.wallThickness = wall_thickness;
+    pipe.wall.diameter = external_diameter - 2 * wall_thickness;
+    pipe.wall.equivalent_roughness = absolute_roughness * pipe.wall.diameter;
+
+
+    oil_parameters_t oil;
+    oil.density.nominal_density = density;
+    oil.viscosity.nominal_viscosity = kinematic_viscosity;
+
+
+    /// Расчет расхода
+    double Pin = 5e6;
+    double Pout = 0.8e6;
+
+    double Q = solve_PP_iteration_(pipe, oil, Pin, Pout);
+
+}
+
+/// @brief Задача PP. Расчет расхода методом Ньютона-Рафсона.
+TEST(PP_task, Newton)
+{
+    double length = 80e3;
+    double external_diameter = 720e-3;
+    double wall_thickness = 10e-3;
+    double absolute_roughness = 0.015e-3;
+    double Zin = 50;
+    double Zout = 100;
+
+    double density = 870;
+    double kinematic_viscosity = 15e-6;
+
+    size_t grid_size = 500;
+
+    /// Создаем сущность трубы
+    pipe_properties_t pipe;
+
+    /// Задаем сетку трубы
+    fill_profile_coordinates_(pipe, length, grid_size);
+    fill_profile_heights_(pipe, Zin, Zout);
+
+    pipe.wall.wallThickness = wall_thickness;
+    pipe.wall.diameter = external_diameter - 2 * wall_thickness;
+    pipe.wall.equivalent_roughness = absolute_roughness * pipe.wall.diameter;
+
+    oil_parameters_t oil;
+    oil.density.nominal_density = density;
+    oil.viscosity.nominal_viscosity = kinematic_viscosity;
+
+    /// Расчет расхода
+    double Pin = 5e6;
+    double Pout = 0.8e6;
+
+    PP_solver_t solver(pipe, oil);
+    double Q = solver.solve(Pin, Pout);
+}
+
+/// @brief Задача PP поверх Эйлера на методе Ньютона
+TEST(PP_task, Euler_Newton)
+{
+    double length = 80e3;
+    double external_diameter = 720e-3;
+    double wall_thickness = 10e-3;
+    double absolute_roughness = 0.015e-3;
+    double Zin = 50;
+    double Zout = 100;
+
+    double density = 870;
+    double kinematic_viscosity = 15e-6;
+
+    size_t grid_size = 500;
+
+    /// Создаем сущность трубы
+    pipe_properties_t pipe;
+
+    /// Задаем сетку трубы
+    fill_profile_coordinates_(pipe, length, grid_size);
+    fill_profile_heights_(pipe, Zin, Zout);
+
+    pipe.wall.wallThickness = wall_thickness;
+    pipe.wall.diameter = external_diameter - 2 * wall_thickness;
+    pipe.wall.equivalent_roughness = absolute_roughness * pipe.wall.diameter;
+
+    oil_parameters_t oil;
+    oil.density.nominal_density = density;
+    oil.viscosity.nominal_viscosity = kinematic_viscosity;
+
+    /// Расчет расхода
+    double Pin = 5e6;
+    double Pout = 0.8e6;
+
+    PP_solver_Newton_Euler_t solver(pipe, oil);
+    double Q = solver.solve(Pin, Pout);
 }
