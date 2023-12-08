@@ -105,7 +105,7 @@ double solve_PP_iteration_(const pipe_properties_t& pipe, const oil_parameters_t
 	return Q;
 }
 
-/// @brief Уравнение трубы для решения методом Эйлера задачи PQ 
+/// @brief Уравнение трубы для решения задачи PQ методом Эйлера  
 class Pipe_model_for_PQ_t : public ode_t<1>
 {
 public:
@@ -244,6 +244,8 @@ class PP_solver_Newton_Euler_t : public fixed_system_t<1>
 	double Pin_ideal = 0;
 	/// @brief Эталонное значение давления на выходе
 	double Pout_ideal = 0;
+	/// @brief Слой буфера в буфере для записи результата расчета
+	layer_t layer;
 
 	using fixed_system_t<1>::var_type;
 public:
@@ -251,8 +253,8 @@ public:
 	/// @brief Констуктор уравнения Бернулли для задачи PP
 	/// @param pipe Ссылка на сущность трубы
 	/// @param problem Ссылка на сущность с условием задачи
-	PP_solver_Newton_Euler_t(const pipe_properties_t& pipe, const oil_parameters_t& oil) :
-		pipe{ pipe }, oil{ oil }
+	PP_solver_Newton_Euler_t(const pipe_properties_t& pipe, const oil_parameters_t& oil, layer_t layer) :
+		pipe{ pipe }, oil{ oil }, layer{ layer}
 	{
 	}
 
@@ -261,9 +263,6 @@ public:
 	/// @return Значение функции невязок при заданной скорости
 	var_type residuals(const var_type& v)
 	{
-		/// Создаем буфер из двух слоев, каждый совпадает по размеру с pipe.profile.heights
-		ring_buffer_t<vector<double>> buffer(2, vector<double>(pipe.profile.getPointCount(), 0));
-
 		/// Объемный расход нефти на основе скорости потока, [м3/с]
 		double Q = v * M_PI * pow(pipe.wall.diameter, 2) / 4;
 
@@ -271,7 +270,7 @@ public:
 		Pipe_model_for_PQ_t pipeModel(this->pipe, this->oil, Q);
 
 		/// Получаем указатель на начало слоя в буфере
-		profile_wrapper<double, 1> start_layer(buffer.current());
+		profile_wrapper<double, 1> start_layer(layer);
 
 		/// Модифицированный метод Эйлера для модели pipeModel,
 		/// расчет ведется справа-налево относительно сетки,
@@ -279,7 +278,7 @@ public:
 		/// результаты расчета запишутся в слой, на который указывает start_layer
 		solve_euler_corrector<1>(pipeModel, -1, Pout_ideal, &start_layer);
 
-		double result = buffer.current().front() - this->Pin_ideal;
+		double result = layer.front() - this->Pin_ideal;
 		return result;
 	}
 
@@ -300,4 +299,73 @@ public:
 		fixed_newton_raphson<1>::solve_dense(*this, initial_speed, parameters, &result);
 		return result.argument * M_PI * pow(pipe.wall.diameter, 2) / 4;
 	}
+};
+
+
+/// @brief Изотермический квазистационарный гидравлический расчет для партий
+class Pipe_model_oil_parties_t : public ode_t<1>
+{
+public:
+	using ode_t<1>::equation_coeffs_type;
+	using ode_t<1>::right_party_type;
+	using ode_t<1>::var_type;
+protected:
+	const pipe_properties_t& pipe;
+	const double flow;
+	const layer_t& density_layer;
+	const layer_t& viscosity_layer;
+
+public:
+	/// @brief Констуктор уравнения трубы
+	/// @param pipe Ссылка на сущность трубы
+	/// @param density_layer Ссылка на профиль плотности
+	/// @param viscosity_layer Ссылка на профиль вязкости
+	/// @param flow Объемный расход, [м3/с]
+	Pipe_model_oil_parties_t(const pipe_properties_t& pipe,
+		const layer_t& density_layer, const layer_t& viscosity_layer, double flow)
+		: pipe(pipe)
+		, flow(flow)
+		, density_layer{ density_layer }
+		, viscosity_layer{ viscosity_layer }
+	{
+	}
+
+	/// @brief Возвращает известную уравнению сетку
+	virtual const vector<double>& get_grid() const override {
+		return pipe.profile.coordinates;
+	}
+
+	/// @brief Возвращает значение правой части ДУ
+	/// см. файл 2023-11-09 Реализация стационарных моделей с прицелом на квазистационар.docx
+	/// @param grid_index Обсчитываемый индекс расчетной сетки
+	/// @param point_vector Начальные условия
+	/// @return Значение правой части ДУ в точке point_vector
+	virtual right_party_type ode_right_party(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		
+		double pressure = point_vector;
+		double density = density_layer[grid_index];
+		double S_0 = pipe.wall.getArea();
+		double v = flow / (S_0);
+		double viscosity = viscosity_layer[grid_index];
+		double Re = v * pipe.wall.diameter / viscosity;
+		double lambda = pipe.resistance_function(Re, pipe.wall.relativeRoughness());
+
+		// Обработка индекса в случае расчетов на границах трубы
+		// Чтобы не выйти за массив высот, будем считать dz/dx в соседней точке
+		grid_index = grid_index == 0 ? grid_index + 1 : grid_index;
+		grid_index = grid_index == pipe.profile.heights.size() - 1 ? grid_index - 1 : grid_index;
+
+		// Расчет производной высотного профиля по координате dz/dx
+		double height_derivative = (pipe.profile.heights[grid_index] - pipe.profile.heights[grid_index - 1]) /
+			(pipe.profile.coordinates[grid_index] - pipe.profile.coordinates[grid_index - 1]);
+
+		double density_derivative = (density_layer[grid_index] - density_layer[grid_index - 1]) /
+			(pipe.profile.coordinates[grid_index] - pipe.profile.coordinates[grid_index - 1]);
+
+		return (density / M_G) * (-1 * lambda * pow(v, 2) / (pipe.wall.diameter * 2 * M_G) - height_derivative
+			+ pressure * pow(density, -2) * density_derivative * M_G);
+	}
+
 };
