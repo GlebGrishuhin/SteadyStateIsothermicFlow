@@ -30,6 +30,7 @@ inline std::string prepare_test_folder()
 }
 
 #include "testing/test_PQ_PP.h"
+#include "testing/test_hydraulic_parties.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

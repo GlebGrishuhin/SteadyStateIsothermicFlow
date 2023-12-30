@@ -42,6 +42,27 @@ void pressure_to_file_(const pipe_properties_t& pipe, const layer_t& profile, st
     out.close();
 }
 
+void profiles_to_file_(const pipe_properties_t& pipe, const vector<vector<layer_t>>& profiles, const vector<string>& param_names, string filename = "data.txt")
+{
+    std::ofstream out;
+    out.open(filename);
+    out << "время" << ',' << "координата"; //<< ',' << "давление" << endl;
+    for (size_t i = 0; i < param_names.size(); i++)
+        out << ',' << param_names[i];
+    out << endl;
+    for (size_t time = 0; time < (profiles[0].size()); time++)
+    {
+        for (size_t i = 0; i < pipe.profile.coordinates.size(); i++)
+        {
+            out << time << ',' << pipe.profile.coordinates[i];
+            for (size_t param_index = 0; param_index < param_names.size(); param_index++)
+                out << ',' << profiles[param_index][time][i];
+            out << endl;
+        }
+    }
+    out.close();
+}
+
 /// @brief Задача PQ. Расчет давления в начале трубы по прямой формуле. См [Лурье 2012] раздел 4.1 задача 1
 TEST(PQ_task, Formula)
 {
@@ -240,7 +261,7 @@ TEST(PP_task, Euler_Newton)
 
     pipe.wall.wallThickness = wall_thickness;
     pipe.wall.diameter = external_diameter - 2 * wall_thickness;
-    pipe.wall.equivalent_roughness = absolute_roughness * pipe.wall.diameter;
+    pipe.wall.equivalent_roughness = absolute_roughness;
 
     oil_parameters_t oil;
     oil.density.nominal_density = density;
@@ -250,6 +271,9 @@ TEST(PP_task, Euler_Newton)
     double Pin = 5e6;
     double Pout = 0.8e6;
 
-    PP_solver_Newton_Euler_t solver(pipe, oil);
+    /// Создаем буфер из двух слоев, каждый совпадает по размеру с pipe.profile.heights
+    ring_buffer_t<vector<double>> buffer(2, vector<double>(pipe.profile.getPointCount(), 0));
+
+    PP_solver_Newton_Euler_t solver(pipe, oil, buffer.current());
     double Q = solver.solve(Pin, Pout);
 }

@@ -105,7 +105,7 @@ double solve_PP_iteration_(const pipe_properties_t& pipe, const oil_parameters_t
 	return Q;
 }
 
-/// @brief Уравнение трубы для решения методом Эйлера задачи PQ 
+/// @brief Уравнение трубы для решения задачи PQ методом Эйлера  
 class Pipe_model_for_PQ_t : public ode_t<1>
 {
 public:
@@ -244,6 +244,8 @@ class PP_solver_Newton_Euler_t : public fixed_system_t<1>
 	double Pin_ideal = 0;
 	/// @brief Эталонное значение давления на выходе
 	double Pout_ideal = 0;
+	/// @brief Слой буфера в буфере для записи результата расчета
+	layer_t layer;
 
 	using fixed_system_t<1>::var_type;
 public:
@@ -251,8 +253,8 @@ public:
 	/// @brief Констуктор уравнения Бернулли для задачи PP
 	/// @param pipe Ссылка на сущность трубы
 	/// @param problem Ссылка на сущность с условием задачи
-	PP_solver_Newton_Euler_t(const pipe_properties_t& pipe, const oil_parameters_t& oil) :
-		pipe{ pipe }, oil{ oil }
+	PP_solver_Newton_Euler_t(const pipe_properties_t& pipe, const oil_parameters_t& oil, layer_t layer) :
+		pipe{ pipe }, oil{ oil }, layer{ layer}
 	{
 	}
 
@@ -261,9 +263,6 @@ public:
 	/// @return Значение функции невязок при заданной скорости
 	var_type residuals(const var_type& v)
 	{
-		/// Создаем буфер из двух слоев, каждый совпадает по размеру с pipe.profile.heights
-		ring_buffer_t<vector<double>> buffer(2, vector<double>(pipe.profile.getPointCount(), 0));
-
 		/// Объемный расход нефти на основе скорости потока, [м3/с]
 		double Q = v * M_PI * pow(pipe.wall.diameter, 2) / 4;
 
@@ -271,7 +270,7 @@ public:
 		Pipe_model_for_PQ_t pipeModel(this->pipe, this->oil, Q);
 
 		/// Получаем указатель на начало слоя в буфере
-		profile_wrapper<double, 1> start_layer(buffer.current());
+		profile_wrapper<double, 1> start_layer(layer);
 
 		/// Модифицированный метод Эйлера для модели pipeModel,
 		/// расчет ведется справа-налево относительно сетки,
@@ -279,7 +278,7 @@ public:
 		/// результаты расчета запишутся в слой, на который указывает start_layer
 		solve_euler_corrector<1>(pipeModel, -1, Pout_ideal, &start_layer);
 
-		double result = buffer.current().front() - this->Pin_ideal;
+		double result = layer.front() - this->Pin_ideal;
 		return result;
 	}
 
@@ -299,5 +298,185 @@ public:
 		// Решение задачи PP с помощью решателя Ньютона - Рафсона
 		fixed_newton_raphson<1>::solve_dense(*this, initial_speed, parameters, &result);
 		return result.argument * M_PI * pow(pipe.wall.diameter, 2) / 4;
+	}
+};
+
+
+/// @brief Изотермический квазистационарный гидравлический расчет для партий
+class Pipe_model_oil_parties_t : public ode_t<1>
+{
+public:
+	using ode_t<1>::equation_coeffs_type;
+	using ode_t<1>::right_party_type;
+	using ode_t<1>::var_type;
+protected:
+	const pipe_properties_t& pipe;
+	const double flow;
+	const layer_t& density_layer;
+	const layer_t& viscosity_layer;
+
+public:
+	/// @brief Констуктор уравнения трубы
+	/// @param pipe Ссылка на сущность трубы
+	/// @param density_layer Ссылка на профиль плотности
+	/// @param viscosity_layer Ссылка на профиль вязкости
+	/// @param flow Объемный расход, [м3/с]
+	Pipe_model_oil_parties_t(const pipe_properties_t& pipe,
+		const layer_t& density_layer, const layer_t& viscosity_layer, double flow)
+		: pipe(pipe)
+		, flow(flow)
+		, density_layer{ density_layer }
+		, viscosity_layer{ viscosity_layer }
+	{
+	}
+
+	/// @brief Возвращает известную уравнению сетку
+	virtual const vector<double>& get_grid() const override {
+		return pipe.profile.coordinates;
+	}
+
+	/// @brief Возвращает значение правой части ДУ
+	/// см. файл 2023-11-09 Реализация стационарных моделей с прицелом на квазистационар.docx
+	/// @param grid_index Обсчитываемый индекс расчетной сетки
+	/// @param point_vector Начальные условия
+	/// @return Значение правой части ДУ в точке point_vector
+	virtual right_party_type ode_right_party(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		
+		double pressure = point_vector;
+		double density = density_layer[grid_index];
+		double S_0 = pipe.wall.getArea();
+		double v = flow / (S_0);
+		double viscosity = viscosity_layer[grid_index];
+		double Re = v * pipe.wall.diameter / viscosity;
+		double lambda = pipe.resistance_function(Re, pipe.wall.relativeRoughness());
+
+		// Обработка индекса в случае расчетов на границах трубы
+		// Чтобы не выйти за массив высот, будем считать dz/dx в соседней точке
+		grid_index = grid_index == 0 ? grid_index + 1 : grid_index;
+		grid_index = grid_index == pipe.profile.heights.size() - 1 ? grid_index - 1 : grid_index;
+
+		// Расчет производной высотного профиля по координате dz/dx
+		double height_derivative = (pipe.profile.heights[grid_index] - pipe.profile.heights[grid_index - 1]) /
+			(pipe.profile.coordinates[grid_index] - pipe.profile.coordinates[grid_index - 1]);
+
+		double density_derivative = (density_layer[grid_index] - density_layer[grid_index - 1]) /
+			(pipe.profile.coordinates[grid_index] - pipe.profile.coordinates[grid_index - 1]);
+
+		return (-1 * lambda * (1.0 / pipe.wall.diameter) * density * pow(v, 2) / 2) - height_derivative * density * M_G;
+	}
+
+};
+
+/// @brief Модель адвекции двух параметров - плотности и вязкости. Скорость задается в виде объемного расхода
+class Pipe_Advection : public pde_t<2>
+{
+public:
+	using pde_t<2>::equation_coeffs_type;
+	using pde_t<2>::right_party_type;
+	using pde_t<2>::var_type;
+protected:
+	/// @brief Труба
+	const pipe_properties_t& pipe;
+	/// @brief Объемный расход
+	const vector<double>& Q;
+public:
+	Pipe_Advection(const pipe_properties_t& pipe,
+		const vector<double>& vol_flow)
+		: pipe(pipe)
+		, Q(vol_flow)
+	{}
+
+	const pipe_properties_t& get_pipe() const
+	{
+		return pipe;
+	}
+
+	/// @brief Возвращает известную уравнению сетку
+	virtual const vector<double>& get_grid() const override {
+		return pipe.profile.coordinates;
+	}
+
+	/// @brief Получение матрицы коэффициентов системы уравнений
+	/// @param grid_index Обсчитываемый индекс расчетной сетки
+	/// @param point_vector Значения параметров в точке расчета
+	/// @return Массив вектор-строк
+	virtual equation_coeffs_type getEquationsCoeffs(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		double S_0 = pipe.wall.getArea();
+		double v = Q[grid_index] / S_0;
+		equation_coeffs_type A;
+		A[0] = { v, 0 };
+		A[1] = { 0, v };
+		return A;
+	}
+
+	/// @brief Получение собственных чисел и соответствующих им ЛЕВЫХ собственных векторов
+	/// \return Список собственных чисел, список собственных векторов
+	virtual pair<var_type, equation_coeffs_type> GetLeftEigens(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		pair<var_type, equation_coeffs_type> result;
+
+		auto& values = result.first;
+		auto& vectors = result.second;
+
+		double S_0 = pipe.wall.getArea();
+		double v = Q[grid_index] / S_0;
+
+		values = { v, v};
+		vectors[0] = { v, v };
+		vectors[1] = { v, v };
+		return result;
+	}
+
+	virtual pair<var_type, equation_coeffs_type> GetRightEigens(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		pair<var_type, equation_coeffs_type> result;
+
+		auto& values = result.first;
+		auto& vectors = result.second;
+
+		double S_0 = pipe.wall.getArea();
+		double v = Q[grid_index] / S_0;
+
+		values = { v, v };
+		vectors[0] = { v, v };
+		vectors[1] = { v, v };
+		return result;
+	}
+
+	/// @brief Правая часть уравнения адвекция - нулевая
+	virtual right_party_type getSourceTerm(
+		size_t grid_index, const var_type& point_var) const override
+	{
+		return { 0.0, 0.0 };
+	}
+
+	virtual equation_coeffs_type getEquationsCoeffsInv(
+		size_t grid_index, const var_type& point_vector) const override
+	{
+		throw std::logic_error("not implemented");
+	}
+
+
+	virtual var_type GetRightEigenVector(
+		size_t profile_index, size_t eigen_index, const var_type& u) const override
+	{
+		throw std::logic_error("not implemented");
+	}
+
+	virtual double get_wave_strength(
+		size_t profile_index, size_t eigen_index, const var_type& u) const override
+	{
+		throw std::logic_error("not implemented");
+	}
+
+	// TODO: Как сформировать ГУ по двум параметрам одновременно. pair<array, double> не подойдет
+	static pair<array<double, 2>, double> form_boundary(double density) {
+		return { {1, 1}, density};
 	}
 };
