@@ -133,6 +133,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="solvers\steady_state_solvers.h" />
+    <ClInclude Include="testing\test_hydraulic_parties.h" />
     <ClInclude Include="testing\test_PQ_PP.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
