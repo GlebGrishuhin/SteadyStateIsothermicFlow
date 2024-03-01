@@ -42,7 +42,7 @@ void pressure_to_file_(const pipe_properties_t& pipe, const layer_t& profile, st
     out.close();
 }
 
-void profiles_to_file_(const pipe_properties_t& pipe, const vector<vector<layer_t>>& profiles, const vector<string>& param_names, string filename = "data.txt")
+void profiles_to_file_(const pipe_properties_t& pipe, const vector<double> time_list, const vector<vector<layer_t>>& profiles, const vector<string>& param_names, string filename = "data.txt")
 {
     std::ofstream out;
     out.open(filename);
@@ -50,11 +50,11 @@ void profiles_to_file_(const pipe_properties_t& pipe, const vector<vector<layer_
     for (size_t i = 0; i < param_names.size(); i++)
         out << ',' << param_names[i];
     out << endl;
-    for (size_t time = 0; time < (profiles[0].size()); time++)
+    for (size_t time = 0; time < (time_list.size() - 1); time++)
     {
         for (size_t i = 0; i < pipe.profile.coordinates.size(); i++)
         {
-            out << time << ',' << pipe.profile.coordinates[i];
+            out << time_list[time] << ',' << pipe.profile.coordinates[i];
             for (size_t param_index = 0; param_index < param_names.size(); param_index++)
                 out << ',' << profiles[param_index][time][i];
             out << endl;
