@@ -135,6 +135,7 @@
     <ClInclude Include="solvers\steady_state_solvers.h" />
     <ClInclude Include="testing\test_hydraulic_parties.h" />
     <ClInclude Include="testing\test_PQ_PP.h" />
+    <ClInclude Include="testing\transport_network.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

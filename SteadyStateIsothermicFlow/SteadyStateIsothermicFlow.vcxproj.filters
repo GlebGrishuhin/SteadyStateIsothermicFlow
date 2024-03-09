@@ -29,5 +29,8 @@
     <ClInclude Include="testing\test_hydraulic_parties.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="testing\transport_network.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

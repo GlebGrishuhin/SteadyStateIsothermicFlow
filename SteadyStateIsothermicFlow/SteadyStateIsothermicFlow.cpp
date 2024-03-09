@@ -3,15 +3,19 @@
 #define GTEST_CATCH_EXCEPTIONS 0
 #define GTEST_HAS_SEH 0
 #define _VARIADIC_MAX 10 /* for gtest */
+
 #include "gtest/gtest.h"
 
 #include <fixed/fixed.h>
 #include <pde_solvers/pde_solvers.h>
 #include <solvers/steady_state_solvers.h>
 
+
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+
+using namespace pde_solvers;
 
 /// @brief Возвращает тестовую строку в формате TestBundle.TestName
 inline std::string get_test_string() {
@@ -31,6 +35,7 @@ inline std::string prepare_test_folder()
 
 #include "testing/test_PQ_PP.h"
 #include "testing/test_hydraulic_parties.h"
+#include "testing/transport_network.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

@@ -10,7 +10,10 @@
 #include <fixed/fixed.h>
 #include <pde_solvers/pde_solvers.h>
 
+
 using namespace std;
+
+using namespace pde_solvers;
 
 typedef vector<double> layer_t;
 
