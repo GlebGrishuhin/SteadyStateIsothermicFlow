@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 
 #include <iomanip>
 #include <iostream>
@@ -27,13 +27,13 @@ namespace transoprt_network
         static task_network_propagation_data_t default_data()
         {
             const size_t PIPES_NUMBER = 8;
-            const size_t T_NUMBER = 3; // номер ребра - отвода на НПЗ
+            const size_t T_NUMBER = 3; // РЅРѕРјРµСЂ СЂРµР±СЂР° - РѕС‚РІРѕРґР° РЅР° РќРџР—
 
             const vector<double> lengths = { 70.561e3, 79.51e3, 17.93e3, 0.222e3, 59.90e3, 66.79e3, 77.77e3, 56.57e3 };
             const vector<double> diameters = { 1,1,1,0.696,1,1,1,1 };
 
             task_network_propagation_data_t result;
-            // Трубы аналогично топологии ТУ
+            // РўСЂСѓР±С‹ Р°РЅР°Р»РѕРіРёС‡РЅРѕ С‚РѕРїРѕР»РѕРіРёРё РўРЈ
             result.pipes = vector <pipe_properties_t>();
 
             simple_pipe_properties simple_LU;
@@ -74,10 +74,10 @@ namespace transoprt_network
 
     class DensityPropagation : public ::testing::Test {
     protected:
-        /// @brief Сеть с движением партий для реального трубопровода с разветвлением
+        /// @brief РЎРµС‚СЊ СЃ РґРІРёР¶РµРЅРёРµРј РїР°СЂС‚РёР№ РґР»СЏ СЂРµР°Р»СЊРЅРѕРіРѕ С‚СЂСѓР±РѕРїСЂРѕРІРѕРґР° СЃ СЂР°Р·РІРµС‚РІР»РµРЅРёРµРј
         task_network_propagation_data_t net_data;
     protected:
-        /// @brief Подготовка к расчету для семейства тестов
+        /// @brief РџРѕРґРіРѕС‚РѕРІРєР° Рє СЂР°СЃС‡РµС‚Сѓ РґР»СЏ СЃРµРјРµР№СЃС‚РІР° С‚РµСЃС‚РѕРІ
         virtual void SetUp() override {
             net_data = task_network_propagation_data_t::default_data();
             double rho_initial = 850;
@@ -87,7 +87,7 @@ namespace transoprt_network
 
     };
 
-    /// @brief Расчетный кейс для движения партий с разветвлением
+    /// @brief Р Р°СЃС‡РµС‚РЅС‹Р№ РєРµР№СЃ РґР»СЏ РґРІРёР¶РµРЅРёСЏ РїР°СЂС‚РёР№ СЃ СЂР°Р·РІРµС‚РІР»РµРЅРёРµРј
     TEST_F(DensityPropagation, MixDensity) {
 
         string path = prepare_test_folder();
@@ -98,30 +98,28 @@ namespace transoprt_network
             { 8, -1 }
         };
 
-        const size_t PRINTED_PIPE = 3; // индекс ребра, для которого будут выводиться профили
+        const size_t PRINTED_PIPE = 3; // РёРЅРґРµРєСЃ СЂРµР±СЂР°, РґР»СЏ РєРѕС‚РѕСЂРѕРіРѕ Р±СѓРґСѓС‚ РІС‹РІРѕРґРёС‚СЊСЃСЏ РїСЂРѕС„РёР»Рё
 
-        double dt = 300; // шаг по времени
+        double dt = 300; // С€Р°Рі РїРѕ РІСЂРµРјРµРЅРё
 
-        double T = 300000; // период моделирования
-        //double T = 800000; // период моделирования (тест трубы 700км)
+        double T = 300000; // РїРµСЂРёРѕРґ РјРѕРґРµР»РёСЂРѕРІР°РЅРёСЏ
+        //double T = 800000; // РїРµСЂРёРѕРґ РјРѕРґРµР»РёСЂРѕРІР°РЅРёСЏ (С‚РµСЃС‚ С‚СЂСѓР±С‹ 700РєРј)
         size_t N = static_cast<int>(T / dt);
-        double t = 0; // текущее время
+        double t = 0; // С‚РµРєСѓС‰РµРµ РІСЂРµРјСЏ
 
-        // Временные ряды граничных условий по плотности и расходу
+        // Р’СЂРµРјРµРЅРЅС‹Рµ СЂСЏРґС‹ РіСЂР°РЅРёС‡РЅС‹С… СѓСЃР»РѕРІРёР№ РїРѕ РїР»РѕС‚РЅРѕСЃС‚Рё Рё СЂР°СЃС…РѕРґСѓ
         vector<double> density_in = vector<double>(N, 870);
         vector<double> density_out = vector<double>(N, 870);
         vector<double> volflow_in = vector<double>(N, 2); 
         vector<double> volflow_out = vector<double>(N, 2);
-
-
 
         std::stringstream filename;
         filename << path << "Rho" << ".csv";
         std::ofstream output(filename.str());
 
         for (size_t index = 0; index < N; ++index) {
-            // Учет краевых условий и расходов на новом шаге
-            for (size_t i = 1; i < net_data.pipes.size(); ++i) { // Костыль
+            // РЈС‡РµС‚ РєСЂР°РµРІС‹С… СѓСЃР»РѕРІРёР№ Рё СЂР°СЃС…РѕРґРѕРІ РЅР° РЅРѕРІРѕРј С€Р°РіРµ
+            for (size_t i = 1; i < net_data.pipes.size(); ++i) { // РљРѕСЃС‚С‹Р»СЊ
                 double q_pipe = i == 1
                     ? volflow_in[index]
                     : volflow_out[index];
